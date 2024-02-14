@@ -3,7 +3,7 @@
   #include <stdlib.h>
   #include <stdbool.h>
   #include <getopt.h>
-  #include "ast/ast.h"
+  #include "abstract_syntax_tree/abstract_syntax_tree.h"
   #include "error/error.h"
 
   struct ast_node *root;
@@ -24,6 +24,7 @@
 %left       <node> NOT MINUS
 %left       <node> BIN_PLUS BIN_MUL BIN_DIV BIN_MOD BIN_LESS BIN_GREATER BIN_EQUALS
 %left       <node> BIN_AND BIN_OR
+%right      <node> ASSIGMENT
 %token      <node> TRUE FALSE STR CHAR HEX BIN DEC
 %token             METHOD
 %token             WHILE REPEAT DO BREAK UNTIL IF THEN ELSE
@@ -37,6 +38,8 @@
 %type <node> body_item
 %type <node> source_item
 %type <node> list_var
+%type <node> list_statements
+%type <node> assigment
 %type <node> type_ref
 %type <node> builtin
 %type <node> custom
@@ -49,6 +52,7 @@
 %type <node> if
 %type <node> block
 %type <node> while
+%type <node> we
 %type <node> do
 %type <node> break
 %type <node> expr
@@ -133,27 +137,35 @@ if: IF expr THEN statement                    {$$ = make_branch_node($2, $4, NUL
     | IF expr THEN statement ELSE statement   {$$ = make_branch_node($2, $4, $6)}
     ;
 
+list_statements:              {$$ = NULL}
+    | statement list_statements {$$ = make_loop_node("list_statements", $1, $2)}
+    ;
+
 block: BEGINING END SEMICOLON                {$$ = make_block(NULL)}
     | BEGINING block_item END SEMICOLON      {$$ = make_block($2)}
     ;
 
 block_item:                   {$$ = NULL}
-    | block_item statement    {$$ = make_common_node("block_item", $1, $2)}
+    | statement block_item    {$$ = make_common_node("block_item", $2, $1)}
     ;
 
 while:
-    WHILE expr DO statement   {$$ = make_loop_node("while", $2, $4)}
+    we DO list_statements   {$$ = make_loop_node("while", $1, $3)}
     ;
 
-do: REPEAT statement WHILE expr SEMICOLON    {$$ = make_loop_node("do-while", $2, $4)}
-    | REPEAT statement UNTIL expr SEMICOLON  {$$ = make_loop_node("do-until", $2, $4)}
+do: REPEAT list_statements we SEMICOLON    {$$ = make_loop_node("do-while", $2, $3)}
+    | REPEAT list_statements UNTIL expr SEMICOLON  {$$ = make_loop_node("do-until", $2, $4)}
     ;
+we: WHILE expr { $$ = $2; };
 
 break: BREAK SEMICOLON        {$$ = make_common_node("break", NULL, NULL)}
     ;
 
-expression: expr SEMICOLON    {$$ = $1}
+expression: expr SEMICOLON     {$$ = $1}
+    | assigment SEMICOLON      {$$ = $1}
     ;
+
+assigment: place ASSIGMENT expr    {$$ = make_assigment($1, $3)}
 
 expr: unary    {$$ = $1}
     | binary   {$$ = $1}
@@ -168,8 +180,7 @@ unary: MINUS expr   {$$ = make_expr_node("MINUS", $2, NULL)}
     | NOT expr      {$$ = make_expr_node("NOT", $2, NULL)}
     ;
 
-binary: expr COLON BIN_EQUALS expr    {$$ = make_expr_node("ASSIGMENT", $1, $4)}
-    | expr BIN_PLUS expr              {$$ = make_expr_node("BIN_PLUS", $1, $3)}
+binary: expr BIN_PLUS expr              {$$ = make_expr_node("BIN_PLUS", $1, $3)}
     | expr MINUS expr                 {$$ = make_expr_node("MINUS", $1, $3)}
     | expr BIN_MUL expr               {$$ = make_expr_node("BIN_MUL", $1, $3)}
     | expr BIN_DIV expr               {$$ = make_expr_node("BIN_DIV", $1, $3)}
